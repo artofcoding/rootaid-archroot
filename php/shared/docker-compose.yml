@@ -1,0 +1,14 @@
+version: '3.7'
+
+services:
+    php-fpm:
+        build:
+            context: .
+            dockerfile: ./Dockerfile
+        image: medienhof/php:${PHP_VERSION}-fpm
+        restart: unless-stopped
+        volumes:
+            - /run/php-fpm:/run/php-fpm:rw
+            - /srv/http/conf/php-fpm.d/php-${PHP_VERSION}.conf:/srv/http/conf/php-fpm.d/php-${PHP_VERSION}.conf:ro
+            - /srv/http/sites:/srv/http/sites:rw
+            - /srv/http/logs/php-fpm:/srv/http/logs/php-fpm:rw
