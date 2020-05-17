@@ -17,71 +17,32 @@ fi
 set -o nounset
 set -o errexit
 
+EMAIL="${EMAIL:-"--register-unsafely-without-email --no-eff-email"}"
 DOMAIN=$1
 
-mkdir -p /srv/http/sites/${DOMAIN}/www
-chown http:http /srv/http/sites/${DOMAIN}
-chmod 770 /srv/http/sites/${DOMAIN}
-chown http:http /srv/http/sites/${DOMAIN}/www
-chmod 770 /srv/http/sites/${DOMAIN}/www
-cat >/srv/http/sites/${DOMAIN}/www/index.html <<EOF
-${DOMAIN}
-EOF
-chown http:http /srv/http/sites/${DOMAIN}/www/index.html
-chmod 660 /srv/http/sites/${DOMAIN}/www/index.html
-cat >/srv/http/sites/${DOMAIN}/www/phpinfo.php <<EOF
-<?php
-phpinfo();
-EOF
-chown http:http /srv/http/sites/${DOMAIN}/www/phpinfo.php
-chmod 660 /srv/http/sites/${DOMAIN}/www/phpinfo.php
-
-cat >/srv/http/conf/nginx.d/enabled/${DOMAIN}.conf <<EOF
-server {
-    listen 443;
-    listen [::]:443;
-    set \$service www;
-    set \$domain ${DOMAIN};
-    server_name ${DOMAIN} www.${DOMAIN};
-    access_log /srv/http/logs/nginx/${DOMAIN}-tls-access.log main;
-    access_log /srv/http/logs/nginx/${DOMAIN}-tls-scripts.log scripts;
-    error_log /srv/http/logs/nginx/${DOMAIN}-tls-error.log;
-    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    charset utf-8;
-    include /srv/http/conf/nginx.d/inc/gzip-std.conf;
-    include /srv/http/conf/nginx.d/inc/ssl-std.conf;
-    include /srv/http/conf/nginx.d/inc/security-std.conf;
-    include /srv/http/conf/nginx.d/inc/location-std.conf;
-    #include /srv/http/conf/nginx.d/inc/csp-self.conf;
-    root /srv/http/sites/${DOMAIN}/www/;
-    # FastCGI _oder_ Joomla
-    include /srv/http/conf/nginx.d/inc/location-fastcgi.conf;
-    #include /srv/http/conf/nginx.d/inc/location-joomla.conf;
-}
-EOF
-
-if [[ ! -d /etc/letsencrypt/live/${DOMAIN} ]]
+if [[ ! -d /srv/http/sites/${DOMAIN}/www ]]
 then
-    certbot certonly \
-        --register-unsafely-without-email --agree-tos --no-eff-email \
-        --webroot  --webroot-path=/var/lib/letsencrypt \
-        --uir \
-        --hsts \
-        --staple-ocsp --must-staple \
-        -n \
-        -d ${DOMAIN} -d www.${DOMAIN}
+    mkdir -p /srv/http/sites/${DOMAIN}/www
+    cat /usr/local/etc/archroot/sites/tmpl/index.html \
+        | sed -e "s#DOMAIN#${DOMAIN}#g" \
+        > /srv/http/sites/${DOMAIN}/www/index.html
+    cp /usr/local/etc/archroot/sites/tmpl/phpinfo.php /srv/http/sites/${DOMAIN}/www
+    cp /usr/local/etc/archroot/sites/tmpl/robots.txt /srv/http/sites/${DOMAIN}/www
 fi
 
-chmod 755 /etc/letsencrypt/archive
-chmod 755 /etc/letsencrypt/archive/${DOMAIN}
-chmod 644 /etc/letsencrypt/archive/${DOMAIN}/privkey*.pem
-chmod 755 /etc/letsencrypt/live
+chown -R http:http /srv/http/sites/${DOMAIN}
+find /srv/http/sites/${DOMAIN} -type d -print0 | xargs -r -0 chmod 755
+find /srv/http/sites/${DOMAIN} -type f -print0 | xargs -r -0 chmod 644
+
+cat /usr/local/etc/nginx/tls-domain.tmpl.conf \
+    | sed -e "s#DOMAIN#${DOMAIN}#g" \
+    >/srv/http/conf/nginx.d/enabled/${DOMAIN}.conf
+if [[ ! -d /etc/letsencrypt/live/${DOMAIN} ]]
+then
+    archroot-certonly.sh -d ${DOMAIN} -d www.${DOMAIN}
+fi
 gixy
-systemctl restart nginx
+sudo nginx -s reload
 
 #openssl s_client -connect ${DOMAIN}:443 -servername ${DOMAIN} -status
 echo QUIT | openssl s_client -connect ${DOMAIN}:443 -status 2> /dev/null | grep -A 17 'OCSP response:' | grep -B 17 'Next Update'
