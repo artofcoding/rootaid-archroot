@@ -1,0 +1,107 @@
+version: '3'
+
+services:
+  vault:
+    image: library/vault:${VAULT_RELEASE}
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    env_file:
+      - ./variables.env
+    volumes:
+      - vaultconfig:/vault/config:rw
+      - vaultlogs:/vault/logs:rw
+      - vaultfile:/vault/file:rw
+    networks:
+      - backend
+    expose:
+      - 8200
+    command: /bin/sh /vault/config/vault-startup.sh
+  kes:
+    image: minio/kes:${KES_RELEASE}
+    restart: unless-stopped
+    depends_on:
+      - vault
+    cap_add:
+      - IPC_LOCK
+    env_file:
+      - ./variables.env
+    volumes:
+      - kesinstance:/var/local:rw
+    networks:
+      - backend
+    expose:
+      - 7373
+    command: server --mlock --config=/var/local/server-config.yml --key=/var/local/kes-server.key --cert=/var/local/kes-server.cert --root "${root_identity}" --auth=off
+  minio:
+    image: minio/minio:${MINIO_RELEASE}
+    restart: unless-stopped
+    depends_on:
+      - kes
+    env_file:
+      - ./variables.env
+    volumes:
+      - minioinstance:/var/local:rw
+      - miniodata:/data:rw
+    networks:
+      - backend
+    expose:
+      - 9000
+    command: server --address=":${MINIO_PORT}" /data
+  mc:
+    image: minio/mc:latest
+    restart: unless-stopped
+    depends_on:
+      - minio
+    env_file:
+      - ./variables.env
+    volumes:
+      - ./minio/policy:/minio/policy:rw
+      - /var/local/minio/data1:/data1:ro
+    networks:
+      - backend
+    entrypoint: tail -f /dev/null
+  rproxy:
+    build:
+      context: nginx
+    image: storage_rproxy:latest
+    restart: unless-stopped
+    depends_on:
+      - minio
+    volumes:
+      - rproxyconf:/etc/nginx
+      - rproxycerts:/etc/letsencrypt
+    networks:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+
+networks:
+  backend:
+    driver: bridge
+    internal: true
+    external: false
+  frontend:
+    driver: bridge
+    internal: false
+    external: false
+
+volumes:
+  vaultconfig:
+    driver: local
+  vaultlogs:
+    driver: local
+  vaultfile:
+    driver: local
+  kesinstance:
+    driver: local
+  minioinstance:
+    driver: local
+  miniodata:
+    driver: local
+  rproxyconf:
+    driver: local
+  rproxycerts:
+    driver: local
