@@ -27,7 +27,9 @@ set -o errexit
 mode=${1:-}
 case "${mode}" in
     install)
+        pacman --noconfirm -Sy archlinux-keyring
         pacman --noconfirm -Syu
+        pacman --noconfirm -S inetutils
         pacman --noconfirm -S man man-pages
         pacman --noconfirm -S pacman-contrib
         systemctl enable paccache.timer
@@ -36,6 +38,9 @@ case "${mode}" in
         pacman --noconfirm -S pwgen
         pacman --noconfirm -S git
         pacman --noconfirm -S ca-certificates ca-certificates-mozilla ca-certificates-utils
+        pacman --noconfirm -S logrotate
+        systemctl enable logrotate.timer
+        systemctl start logrotate.timer
         pacman --noconfirm -Scc
         timedatectl set-timezone Europe/Berlin
     ;;
@@ -86,12 +91,12 @@ EOF
         chown root:root /etc/nginx/nginx.conf
         chmod 600 /etc/nginx/nginx.conf
         # directories and files
-        find /srv/http/conf -print0 | xargs -0 -r chown root:root
-        find /srv/http/conf -type d -print0 | xargs -0 -r chmod 555
-        find /srv/http/conf -type f -print0 | xargs -0 -r chmod 644
+        find /srv/http/conf -print0 | xargs -r -0 chown root:root
+        find /srv/http/conf -type d -print0 | xargs -r -0 chmod 555
+        find /srv/http/conf -type f -print0 | xargs -r -0 chmod 644
         # ssl
         chown root:root /srv/http/ssl
-        chmod 750 /srv/http/ssl
+        chmod 755 /srv/http/ssl
         find /srv/http/ssl/* -type f -print0 | xargs -r -0 chmod 440
         # logs
         chown http:http /srv/http/logs
@@ -99,22 +104,19 @@ EOF
         # sites
         chown root:root /srv/http/sites
         chmod 755 /srv/http/sites
+        # sites/deadend
+        chown root:root /srv/http/sites/deadend
+        chmod 555 /srv/http/sites/deadend
+        # sites/*
         find /srv/http/sites/* -print0 | xargs -r -0 chown http:http
         find /srv/http/sites/* -type d -print0 | xargs -r -0 chmod 750
         find /srv/http/sites/* -type f -print0 | xargs -r -0 chmod 640
+        # tmp
         chown http:http /srv/http/sites/tmp
         chmod 0700 /srv/http/sites/tmp
         find /srv/http/sites/tmp -type f -print0 | xargs -r -0 chmod 600
-        # sites - sftp
-        #chown root:root /srv/http/sites/andreaslange
-        #chmod 755 /srv/http/sites/andreaslange
-        #find /srv/http/sites/andreaslange -print0 | xargs chown ala:http
-        #find /srv/http/sites/andreaslange -type d -print0 | xargs -r -0 chmod 750
-        #find /srv/http/sites/andreaslange -type f -print0 | xargs -r -0 chmod 640
-        #chown root:root /srv/http/sites/stebografie
-        #chmod 755 /srv/http/sites/stebografie
-        #chown root:root /srv/http/sites/lolamarella
-        #chmod 755 /srv/http/sites/lolamarella
+        # custom
+        exec "$(dirname $0)/$(hostname -f)-perms.sh"
     ;;
 esac
 
