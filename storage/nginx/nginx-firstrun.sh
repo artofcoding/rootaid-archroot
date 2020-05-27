@@ -19,7 +19,8 @@ cat "${execdir}"/minio.tmpl.conf \
 cat "${execdir}"/hoerbuchdienst.tmpl.conf \
     | sed -e "s#HOSTNAME#${HBD_HOSTNAME}#g" \
     >"${instancedir}"/hoerbuchdienst.conf.disabled
-docker cp "${instancedir}"/minio.conf.disabled /etc/nginx/conf.d/
+container="storage_nginx_1"
+docker cp "${instancedir}"/minio.conf.disabled ${container}:/etc/nginx/conf.d/
 #TOOD COPY "${instancedir}"/hoerbuchdienst.conf.disabled /etc/nginx/conf.d/
 
 echo "Starting nginx"
