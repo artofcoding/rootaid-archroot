@@ -24,9 +24,9 @@ echo "Starting nginx"
 docker-compose up -d --no-deps rproxy
 sleep 5
 
-container="storage_nginx_1"
+container="storage_rproxy_1"
 docker cp "${instancedir}"/minio.conf.disabled ${container}:/etc/nginx/conf.d/
-#TOOD COPY "${instancedir}"/hoerbuchdienst.conf.disabled /etc/nginx/conf.d/
+docker cp "${instancedir}"/hoerbuchdienst.conf.disabled ${container}:/etc/nginx/conf.d/
 
 echo "Creating TLS server certificates"
 hostname="$(hostname -f)"
