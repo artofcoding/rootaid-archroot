@@ -12,7 +12,8 @@ then
     echo "usage: $0 <mode>"
     echo "  modes:"
     echo "        install"
-    echo "        configure"
+    echo "        install-php"
+    echo "        install-portainer"
     exit 1
 fi
 

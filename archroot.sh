@@ -40,9 +40,9 @@ case "${mode}" in
         pacman --noconfirm -S ca-certificates ca-certificates-mozilla ca-certificates-utils
         pacman --noconfirm -S logrotate
         systemctl enable logrotate.timer
-        systemctl start logrotate.timer
         pacman --noconfirm -Scc
         timedatectl set-timezone Europe/Berlin
+        echo "Please reboot"
     ;;
     setup-storage)
         sfdisk --dump /dev/sda >sda.dump
