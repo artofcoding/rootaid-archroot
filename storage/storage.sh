@@ -18,7 +18,7 @@ usage() {
 mode=$1 ; shift
 case "${mode}" in
     destroy)
-        [[ $# -eq 1 ]] && all=$1 || all="no"
+        [[ $# -eq 1 ]] && all="$1" || all="no"
         pushd "${execdir}" >/dev/null
         export $(cat "${execdir}"/variables.env)
         docker-compose down
