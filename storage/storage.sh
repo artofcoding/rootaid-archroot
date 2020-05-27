@@ -21,6 +21,7 @@ case "${mode}" in
         pushd "${execdir}" >/dev/null
         export $(cat "${execdir}"/variables.env)
         docker-compose down
+        set +o errexit
         rm -rf kes/instance
         rm -rf vault/instance
         #rm -rf nginx/instance
@@ -39,6 +40,7 @@ case "${mode}" in
         #docker image rm storage-rproxy:latest
         #docker image rm storage-rabbitmq:latest
         docker image prune -f
+        set -o errexit
         popd >/dev/null
     ;;
     docker-ipv6)
