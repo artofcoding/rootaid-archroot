@@ -49,9 +49,9 @@ docker-compose exec rproxy \
 docker-compose exec rproxy \
     certbot certonly ${certonly_args} -d "hoerbuchdienst.${hostname}"
 
-echo "Activating nginx configuration"
-docker-compose exec rproxy \
-    mv /etc/nginx/conf.d/minio.conf.disabled /etc/nginx/conf.d/minio.conf
+#echo "Activating nginx configuration"
+#docker-compose exec rproxy \
+#    mv /etc/nginx/conf.d/minio.conf.disabled /etc/nginx/conf.d/minio.conf
 
 docker-compose down
 
