@@ -18,13 +18,14 @@ usage() {
 mode=$1 ; shift
 case "${mode}" in
     destroy)
+        [[ $# -eq 1 ]] && all=$1
         pushd "${execdir}" >/dev/null
         export $(cat "${execdir}"/variables.env)
         docker-compose down
         set +o errexit
         rm -rf kes/instance
         rm -rf vault/instance
-        #rm -rf nginx/instance
+        [[ "${all}" == "all" ]] && rm -rf nginx/instance
         docker system prune -f
         docker volume rm storage_kesinstance
         docker volume rm storage_mcrootconfig
@@ -32,13 +33,13 @@ case "${mode}" in
         docker volume rm storage_minioinstance
         docker volume rm storage_miniopolicy
         docker volume rm storage_rabbitmqdata
-        #docker volume rm storage_rproxycerts
+        [[ "${all}" == "all" ]] && docker volume rm storage_rproxycerts
         docker volume rm storage_rproxyconf
         docker volume rm storage_vaultconfig
         docker volume rm storage_vaultfile
         docker volume rm storage_vaultlogs
-        #docker image rm storage-rproxy:latest
-        #docker image rm storage-rabbitmq:latest
+        [[ "${all}" == "all" ]] && docker image rm storage-rproxy:latest
+        [[ "${all}" == "all" ]] && docker image rm storage-rabbitmq:latest
         docker image prune -f
         set -o errexit
         popd >/dev/null
