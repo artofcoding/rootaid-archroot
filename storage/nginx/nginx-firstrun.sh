@@ -7,7 +7,7 @@ set -o errexit
 execdir="$(pushd $(dirname $0) >/dev/null ; pwd ; popd >/dev/null)"
 instancedir="${execdir}/instance"
 
-export $(cat "${execdir}"/variables.env)
+export $(cat "${execdir}"/../variables.env)
 
 echo "Setting up nginx ${HOSTNAME}"
 
