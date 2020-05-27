@@ -4,14 +4,13 @@
 set -o nounset
 set -o errexit
 
-prefix="minio-"
-
 kes_cli="docker-compose exec \
     -e KES_CLIENT_TLS_KEY_FILE=/var/local/minio.key \
     -e KES_CLIENT_TLS_CERT_FILE=/var/local/minio.cert \
     kes kes"
 
-k="${prefix}test-1"
+key_prefix="minio-"
+k="${key_prefix}test-1"
 
 echo "KES test: create ${k}"
 ${kes_cli} key create ${k} -k

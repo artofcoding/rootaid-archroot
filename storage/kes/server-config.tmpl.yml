@@ -2,8 +2,10 @@ address: 0.0.0.0:7373
 root: ROOT_IDENTITY
 
 tls:
-  key: /var/local/kes-server.key
-  cert: /var/local/kes-server.cert
+  #key: /var/local/kes-server.key
+  #cert: /var/local/kes-server.cert
+  key: /etc/letsencrypt/live/KES_HOSTNAME/privkey.pem
+  cert: /etc/letsencrypt/live/KES_HOSTNAME/cert.pem
 
 policy:    
   minio:
@@ -30,8 +32,9 @@ keys:
     status:
       ping: 10s
     tls:
-      ca: /var/local/vault-server.cert
+      #ca: /var/local/vault-server.cert
+      ca: /etc/letsencrypt/live/VAULT_HOSTNAME/cert.pem
 
 log:
   error: on
-  audit: off
+  audit: on

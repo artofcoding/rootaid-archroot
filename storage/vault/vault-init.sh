@@ -7,35 +7,43 @@ set -o errexit
 execdir="$(pushd $(dirname $0) >/dev/null ; pwd ; popd >/dev/null)"
 instancedir="${execdir}/instance"
 
-echo "Setting up Vault in $(pwd)"
+echo "Setting up Vault"
+container="storage_vault_1"
+container_configdir="${container}:/vault/config"
 
 echo "Creating Vault service"
 docker-compose up --no-start --no-deps vault
 
-if [[ ! -d ${instancedir}/keys ]]
+if [[ "${USE_LETSENCRYPT}" != "yes" ]]
 then
-    echo "Creating self-signed TLS certificates"
-    mkdir -p ${instancedir}/keys
-    openssl ecparam -genkey -name prime256v1 \
-        | openssl ec -out ${instancedir}/keys/vault-server.key
-    openssl req -new -x509 \
-        -days 30 \
-        -key ${instancedir}/keys/vault-server.key \
-        -out ${instancedir}/keys/vault-server.cert \
-        -subj "/C=/ST=/L=/O=/CN=vault" \
-        -addext "subjectAltName = IP:127.0.0.1,DNS:vault"
+    if [[ ! -d ${instancedir}/keys ]]
+    then
+        echo "Creating self-signed TLS certificates"
+        mkdir -p ${instancedir}/keys
+        openssl ecparam -genkey -name prime256v1 \
+            | openssl ec -out ${instancedir}/keys/vault-server.key
+        openssl req -new -x509 \
+            -days 30 \
+            -key ${instancedir}/keys/vault-server.key \
+            -out ${instancedir}/keys/vault-server.cert \
+            -subj "/C=/ST=/L=/O=/CN=vault" \
+            -addext "subjectAltName = IP:127.0.0.1,DNS:${VAULT_HOSTNAME}"
+    fi
+    # Vault keys and configuration
+    docker cp ${instancedir}/keys/vault-server.key ${container_configdir}
+    docker cp ${instancedir}/keys/vault-server.cert ${container_configdir}
 fi
 
-container="storage_vault_1"
-container_configdir="${container}:/vault/config"
-# Vault keys and configuration
-docker cp ${instancedir}/keys/vault-server.key ${container_configdir}
-docker cp ${instancedir}/keys/vault-server.cert ${container_configdir}
-docker cp ${execdir}/vault-config.json ${container_configdir}
+# Vault configuration
+cat "${execdir}"/vault-config.tmpl.json \
+    | sed -e "s#VAULT_HOSTNAME#${VAULT_HOSTNAME}#g" \
+    >"${execdir}"/vault-config.json.$$
+docker cp "${execdir}"/vault-config.json.$$ "${container_configdir}"/vault-config.json
+rm "${execdir}"/vault-config.json.$$
 # Policies
-docker cp ${execdir}/kes-policy.hcl ${container_configdir}
+docker cp "${execdir}"/kes-policy.hcl "${container_configdir}"
 # Vault startup
-docker cp ${execdir}/vault-startup.sh ${container}:/vault/config
+docker cp "${execdir}"/vault-startup.sh "${container}":/vault/config
 
 echo "Starting Vault service"
 docker-compose up -d vault

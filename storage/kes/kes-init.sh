@@ -8,19 +8,28 @@ execdir="$(pushd $(dirname $0) >/dev/null ; pwd ; popd >/dev/null)"
 instancedir="${execdir}/instance"
 
 echo "Setting up MinIO KES"
+container="storage_kes_1"
 
-echo "Creating MinIO KES TLS certificates"
-if [[ ! -d ${instancedir}/keys || ! -f ${instancedir}/keys/kes-server.key ]]
+echo "Creating MinIO KES service"
+docker-compose up --no-start kes
+
+mkdir -p ${instancedir}/keys
+if [[ "${USE_LETSENCRYPT}" != "yes" ]]
 then
-    mkdir -p ${instancedir}/keys
-    openssl ecparam -genkey -name prime256v1 \
-        | openssl ec -out ${instancedir}/keys/kes-server.key
-    openssl req -new -x509 \
-        -days 30 \
-        -key ${instancedir}/keys/kes-server.key \
-        -out ${instancedir}/keys/kes-server.cert \
-        -subj "/C=/ST=/L=/O=/CN=kes" \
-        -addext "subjectAltName = IP:127.0.0.1,DNS:kes"
+    if [[ ! -d ${instancedir}/keys ]]
+    then
+        echo "Creating MinIO KES self-signed TLS certificates"
+        openssl ecparam -genkey -name prime256v1 \
+            | openssl ec -out ${instancedir}/keys/kes-server.key
+        openssl req -new -x509 \
+            -days 30 \
+            -key ${instancedir}/keys/kes-server.key \
+            -out ${instancedir}/keys/kes-server.cert \
+            -subj "/C=/ST=/L=/O=/CN=kes" \
+            -addext "subjectAltName = IP:127.0.0.1,DNS:${KES_HOSTNAME}"
+    fi
+    docker cp "${instancedir}"/keys/kes-server.key ${container}:/var/local
+    docker cp "${instancedir}"/keys/kes-server.cert ${container}:/var/local
 fi
 
 echo "Configuring Vault for MinIO KES"
@@ -38,7 +47,7 @@ echo "Creating MinIO KES keys"
 kes_init_cli="docker run \
         --rm \
         --mount type=bind,source=${instancedir}/keys,destination=/instance/keys \
-        minio/kes:v0.8.2"
+        minio/kes:${KES_RELEASE}"
 
 if [[ ! -f ${instancedir}/keys/root.key || ! -f ${instancedir}/keys/root.cert ]]
 then
@@ -47,6 +56,8 @@ then
 fi
 root_identity="$(${kes_init_cli} tool identity of /instance/keys/root.cert)"
 echo "Identity of root.cert: ${root_identity}"
+docker cp "${instancedir}"/keys/root.key ${container}:/var/local
+docker cp "${instancedir}"/keys/root.cert ${container}:/var/local
 if [[ ! -f ${instancedir}/keys/minio.key || ! -f ${instancedir}/keys/minio.cert ]]
 then
     rm -f ${instancedir}/keys/minio.*
@@ -54,6 +65,8 @@ then
 fi
 minio_identity="$(${kes_init_cli} tool identity of /instance/keys/minio.cert)"
 echo "Identity of minio: ${minio_identity}"
+docker cp "${instancedir}"/keys/minio.key ${container}:/var/local
+docker cp "${instancedir}"/keys/minio.cert ${container}:/var/local
 
 # server-config
 mkdir -p "${execdir}"/instance/config
@@ -62,22 +75,15 @@ sed -i'' \
     "${execdir}"/../variables.env
 cat "${execdir}"/server-config.tmpl.yml \
     | sed \
+        -e "s#KES_HOSTNAME#${KES_HOSTNAME}#" \
+        -e "s#VAULT_HOSTNAME#${VAULT_HOSTNAME}#" \
         -e "s#ROOT_IDENTITY#${root_identity}#" \
         -e "s#APP_IDENTITY#${minio_identity}#" \
         -e "s#APPROLE_ID#${approle_id}#" \
         -e "s#APPROLE_SECRET_ID#${approle_secret_id}#" \
     >"${execdir}"/instance/config/server-config.yml
 
-echo "Creating MinIO KES service"
-docker-compose up --no-start kes
-
-container="storage_kes_1"
-docker cp "${instancedir}"/config/server-config.yml ${container}:/var/local/
-docker cp "${instancedir}"/keys/kes-server.key ${container}:/var/local/
-docker cp "${instancedir}"/keys/kes-server.cert ${container}:/var/local/
-docker cp "${instancedir}"/keys/root.key ${container}:/var/local/
-docker cp "${instancedir}"/keys/root.cert ${container}:/var/local/
-docker cp "${instancedir}"/keys/minio.key ${container}:/var/local/
-docker cp "${instancedir}"/keys/minio.cert ${container}:/var/local/
+echo "Copying configuration to MinIO KES"
+docker cp "${instancedir}"/config/server-config.yml ${container}:/var/local
 
 exit 0

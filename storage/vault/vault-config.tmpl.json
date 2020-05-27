@@ -10,8 +10,8 @@
     "listener": {
         "tcp": {
             "address": "0.0.0.0:8200",
-            "tls_cert_file": "/vault/config/vault-server.cert",
-            "tls_key_file": "/vault/config/vault-server.key",
+            "tls_cert_file": "/etc/letsencrypt/live/VAULT_HOSTNAME/cert.pem",
+            "tls_key_file": "/etc/letsencrypt/live/VAULT_HOSTNAME/privkey.pem",
             "tls_min_version": "tls12"
         }
     },

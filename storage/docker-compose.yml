@@ -4,11 +4,13 @@ services:
   vault:
     image: library/vault:${VAULT_RELEASE}
     restart: unless-stopped
+    hostname: ${VAULT_HOSTNAME}
     cap_add:
       - IPC_LOCK
     env_file:
       - ./variables.env
     volumes:
+      - rproxycerts:/etc/letsencrypt:ro
       - vaultconfig:/vault/config:rw
       - vaultlogs:/vault/logs:rw
       - vaultfile:/vault/file:rw
@@ -20,6 +22,7 @@ services:
   kes:
     image: minio/kes:${KES_RELEASE}
     restart: unless-stopped
+    hostname: ${KES_HOSTNAME}
     depends_on:
       - vault
     cap_add:
@@ -27,50 +30,96 @@ services:
     env_file:
       - ./variables.env
     volumes:
+      - rproxycerts:/etc/letsencrypt:ro
       - kesinstance:/var/local:rw
     networks:
       - backend
     expose:
       - 7373
-    command: server --mlock --config=/var/local/server-config.yml --key=/var/local/kes-server.key --cert=/var/local/kes-server.cert --root "${root_identity}" --auth=off
+    command: server --mlock --config=/var/local/server-config.yml --key=/etc/letsencrypt/live/${KES_HOSTNAME}/privkey.pem --cert=/etc/letsencrypt/live/${KES_HOSTNAME}/cert.pem --root "${root_identity}" --auth=off
   minio:
     image: minio/minio:${MINIO_RELEASE}
     restart: unless-stopped
+    hostname: ${MINIO_HOSTNAME}
     depends_on:
       - kes
     env_file:
       - ./variables.env
     volumes:
+      - rproxycerts:/etc/letsencrypt:ro
       - minioinstance:/var/local:rw
-      - miniodata:/data:rw
+      - miniodata:/miniodata:rw
     networks:
       - backend
     expose:
       - 9000
-    command: server --address=":${MINIO_PORT}" /data
+    command: server --address=":${MINIO_PORT}" /miniodata
   mc:
-    image: minio/mc:latest
+    image: minio/mc:${MC_RELEASE}
     restart: unless-stopped
     depends_on:
       - minio
     env_file:
       - ./variables.env
     volumes:
-      - ./minio/policy:/minio/policy:rw
+      - mcrootconfig:/root/.mc:rw
+      - miniopolicy:/var/local:rw
       - /var/local/minio/data1:/data1:ro
     networks:
       - backend
     entrypoint: tail -f /dev/null
+  rabbitmq:
+    build:
+      context: rabbitmq
+      dockerfile: Dockerfile
+    image: storage-rabbitmq:${RABBITMQ_RELEASE}
+    hostname: ${RABBITMQ_HOSTNAME}
+    env_file:
+      - ./variables.env
+    volumes:
+      - rproxycerts:/etc/letsencrypt:ro
+      - rabbitmqdata:/var/lib/rabbitmq:rw
+    networks:
+      - backend
+      - rabbitmq_interconnect
+    expose:
+      - 4369 # epmd, a helper discovery daemon used by RabbitMQ nodes and CLI tools
+      - 5672 # used by AMQP 0-9-1 and 1.0 clients without and with TLS
+      - 5671 # used by AMQP 0-9-1 and 1.0 clients without and with TLS
+      #- 25672 # used for inter-node and CLI tools communication (Erlang distribution server port) and is allocated from a dynamic range (limited to a single port by default, computed as AMQP port + 20000). Unless external connections on these ports are really necessary (e.g. the cluster uses federation or CLI tools are used on machines outside the subnet), these ports should not be publicly exposed. See networking guide for details.
+      #- 35672 # used by CLI tools (Erlang distribution client ports) for communication with nodes and is allocated from a dynamic range (computed as server distribution port + 10000 through server distribution port + 10010). See networking guide for details.
+      #- 35673
+      #- 35674
+      #- 35675
+      #- 35676
+      #- 35677
+      #- 35678
+      #- 35679
+      #- 35680
+      #- 35681
+      #- 35682
+      #- 15672 # HTTP API clients, management UI and rabbitmqadmin (only if the management plugin is enabled)
+      #- 61613 # STOMP clients without and with TLS (only if the STOMP plugin is enabled)
+      #- 61614 # STOMP clients without and with TLS (only if the STOMP plugin is enabled)
+      #- 1883 # (MQTT clients without and with TLS, if the MQTT plugin is enabled
+      #- 8883 # (MQTT clients without and with TLS, if the MQTT plugin is enabled
+      #- 15674 # STOMP-over-WebSockets clients (only if the Web STOMP plugin is enabled)
+      #- 15675 # MQTT-over-WebSockets clients (only if the Web MQTT plugin is enabled)
+      #- 15692 # Prometheus metrics (only if the Prometheus plugin is enabled)
+    ports:
+      - "5671:5671"
+  #hoerbuchdienst:
+  #  depends_on:
+  #    - rabbitmq
+  #    - minio
   rproxy:
     build:
       context: nginx
-    image: storage_rproxy:latest
+    image: storage_rproxy:${NGINX_RELEASE}
     restart: unless-stopped
-    depends_on:
-      - minio
     volumes:
-      - rproxyconf:/etc/nginx
-      - rproxycerts:/etc/letsencrypt
+      - rproxyconf:/etc/nginx:rw
+      - rproxycerts:/etc/letsencrypt:rw
     networks:
       - backend
       - frontend
@@ -82,6 +131,10 @@ networks:
   backend:
     driver: bridge
     internal: true
+    external: false
+  rabbitmq_interconnect:
+    driver: bridge
+    internal: false
     external: false
   frontend:
     driver: bridge
@@ -99,7 +152,13 @@ volumes:
     driver: local
   minioinstance:
     driver: local
+  miniopolicy:
+    driver: local
   miniodata:
+    driver: local
+  mcrootconfig:
+    driver: local
+  rabbitmqdata:
     driver: local
   rproxyconf:
     driver: local

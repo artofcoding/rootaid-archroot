@@ -23,10 +23,21 @@ case "${mode}" in
         docker-compose down
         rm -rf kes/instance
         rm -rf vault/instance
-        rm -rf nginx/instance
+        #rm -rf nginx/instance
         docker system prune -f
-        docker volume prune -f
-        docker image rm storage_rproxy:latest
+        docker volume rm storage_kesinstance
+        docker volume rm storage_mcrootconfig
+        docker volume rm storage_miniodata
+        docker volume rm storage_minioinstance
+        docker volume rm storage_miniopolicy
+        docker volume rm storage_rabbitmqdata
+        #docker volume rm storage_rproxycerts
+        docker volume rm storage_rproxyconf
+        docker volume rm storage_vaultconfig
+        docker volume rm storage_vaultfile
+        docker volume rm storage_vaultlogs
+        #docker image rm storage-rproxy:latest
+        #docker image rm storage-rabbitmq:latest
         docker image prune -f
         popd >/dev/null
     ;;
@@ -42,44 +53,83 @@ EOF
     ;;
     init)
         pushd "${execdir}" >/dev/null
+        VAULT_HOSTNAME="vault.$(hostname -f)"
+        sed -i'' -e "s#VAULT_HOSTNAME=.*#VAULT_HOSTNAME=${VAULT_HOSTNAME}#g" variables.env
+        sed -i'' -e "s#/VAULT_HOSTNAME#/${VAULT_HOSTNAME}#g" variables.env
+        KES_HOSTNAME="kes.$(hostname -f)"
+        sed -i'' -e "s#KES_HOSTNAME=.*#KES_HOSTNAME=${KES_HOSTNAME}#g" variables.env
+        sed -i'' -e "s#/KES_HOSTNAME#/${KES_HOSTNAME}#g" variables.env
+        MINIO_HOSTNAME="s3.$(hostname -f)"
+        MINIO_DOMAIN="s3.$(hostname -f)"
+        sed -i'' -e "s#MINIO_HOSTNAME=.*#MINIO_HOSTNAME=${MINIO_HOSTNAME}#g" variables.env
+        sed -i'' -e "s#MINIO_DOMAIN=.*#MINIO_DOMAIN=${MINIO_DOMAIN}#g" variables.env
+        RABBITMQ_HOSTNAME="rabbitmq.$(hostname -f)"
+        sed -i'' -e "s#RABBITMQ_HOSTNAME=.*#RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME}#g" variables.env
+        sed -i'' -e "s#/RABBITMQ_HOSTNAME#/${RABBITMQ_HOSTNAME}#g" variables.env
+        sed -i'' -e "s#RABBITMQ_NODENAME=.*#RABBITMQ_NODENAME=rabbitmq@${RABBITMQ_HOSTNAME}#g" variables.env
+        HBD_HOSTNAME="hoerbuchdienst.$(hostname -f)"
+        sed -i'' -e "s#HBD_HOSTNAME=.*#HBD_HOSTNAME=${HBD_HOSTNAME}#g" variables.env
         export $(cat "${execdir}"/variables.env)
         docker-compose config
+        # nginx
+        echo "Building nginx image"
+        pushd "${execdir}" >/dev/null
+        docker-compose build --build-arg NGINX_RELEASE=${NGINX_RELEASE} rproxy
+        popd >/dev/null
+        # nginx, no certificates exist
+        if [[ $(docker volume ls | grep -c storage_rproxycerts) == 0 ]]
+        then
+            "${execdir}"/nginx/nginx-firstrun.sh
+        fi
+        # Vault
         "${execdir}"/vault/vault-init.sh
+        # MinIO KES
         "${execdir}"/kes/kes-init.sh
-        echo "Copying Vault TLS server certificate to Minio KES"
-        container="storage_kes_1"
-        docker cp "${execdir}"/vault/instance/keys/vault-server.cert ${container}:/var/local
-        echo "done"
+        if [[ -d "${execdir}"/vault/instance/keys ]]
+        then
+            echo "Copying Vault TLS server certificate to MinIO KES"
+            container="storage_kes_1"
+            docker cp "${execdir}"/vault/instance/keys/vault-server.cert ${container}:/var/local
+            echo "done"
+        fi
         "${execdir}"/kes/kes-firstrun.sh
+        # MinIO
         "${execdir}"/minio/minio-firstrun.sh
         echo "Copying KES keys to MinIO"
-        docker-compose up --no-start --no-deps minio
+        docker-compose up --no-start minio
         container="storage_minio_1"
         container_local="${container}:/var/local"
         docker cp "${execdir}"/kes/instance/keys/minio.key ${container_local}
         docker cp "${execdir}"/kes/instance/keys/minio.cert ${container_local}
-        docker cp "${execdir}"/kes/instance/keys/kes-server.cert ${container_local}
+        if [[ -f "${execdir}"/kes/instance/keys/kes-server.cert ]]
+        then
+            docker cp "${execdir}"/kes/instance/keys/kes-server.cert ${container_local}
+        fi
         echo "done"
-        "${execdir}"/nginx/nginx-firstrun.sh
-        docker-compose up -d
+        # RabbitMQ - TLS certificate
+        docker-compose build --build-arg RABBITMQ_RELEASE=${RABBITMQ_RELEASE} rabbitmq
+        docker-compose up -d --no-deps rproxy
+        docker-compose exec rproxy ls -l /etc/letsencrypt/archive/${RABBITMQ_HOSTNAME}/
+        docker-compose exec rproxy chmod 644 /etc/letsencrypt/archive/${RABBITMQ_HOSTNAME}/privkey1.pem
+        docker-compose exec rproxy chmod 644 /etc/letsencrypt/archive/${RABBITMQ_HOSTNAME}/cert1.pem
+        # RabbitMQ
+        echo "Starting RabbitMQ"
+        docker-compose up -d rabbitmq
+        echo "Initializing RabbitMQ"
+        docker-compose exec rabbitmq /usr/local/bin/rabbitmq-firstrun.sh
+        #
         echo "Waiting for services to start..."
-        sleep 5
+        docker-compose up -d
+        sleep 10
         echo "done"
-        docker-compose exec mc \
-            mc config host add minio "http://minio:9000" "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}"
+        "${execdir}"/minio/mc-firstrun.sh
         popd >/dev/null
     ;;
     addpolicy)
         policy_name=$1 ; shift
-        bucket_name=$1 ; shift
         pushd "${execdir}" >/dev/null
-        cat "${execdir}"/minio/policy/"${policy_name}".json \
-            | sed -e "s#BUCKET_NAME#${bucket_name}#g" \
-            | sed -e "s#PATH#*#g" \
-            >"${execdir}"/minio/policy/"${policy_name}".json.$$
         docker-compose exec mc \
-            mc admin policy add minio "${policy_name}" /minio/policy/"${policy_name}".json.$$
-        rm "${execdir}"/minio/policy/"${policy_name}".json.$$
+            mc admin policy add minio "${policy_name}" /var/local/"${policy_name}".json
         popd >/dev/null
     ;;
     adduser)
@@ -88,7 +138,7 @@ EOF
         policy_name=$1 ; shift
         pushd "${execdir}" >/dev/null
         docker-compose exec mc \
-            mc admin user add minio "${username}" "${password}"
+            mc admin user add minio-admin "${username}" "${password}"
         popd >/dev/null
     ;;
     userpolicy)
@@ -96,7 +146,7 @@ EOF
         policy_name=$1 ; shift
         pushd "${execdir}" >/dev/null
         docker-compose exec mc \
-            mc admin policy set minio "${policy_name}" user="${username}"
+            mc admin policy set minio-admin "${policy_name}" user="${username}"
         popd >/dev/null
     ;;
     start)

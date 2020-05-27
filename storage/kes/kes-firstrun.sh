@@ -12,8 +12,8 @@ docker-compose up -d kes
 sleep 10
 
 # Test
-echo "Testing MinIO KES key store"
-"${execdir}"/kes-key-test.sh
+#echo "Testing MinIO KES key store"
+#"${execdir}"/kes-key-test.sh
 
 # MiniIO Key
 echo "Creating MinIO master key"

@@ -1,0 +1,49 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "admin:ConfigUpdate",
+                "admin:CreateUser",
+                "admin:DeleteUser",
+                "admin:ListUsers",
+                "admin:EnableUser",
+                "admin:DisableUser",
+                "admin:GetUser",
+                "admin:ServerInfo",
+                "admin:ServerUpdate",
+                "admin:StorageInfo",
+                "admin:DataUsageInfo",
+                "admin:TopLocks",
+                "admin:OBDInfo",
+                "admin:Profiling,",
+                "admin:ServerTrace",
+                "admin:ConsoleLog",
+                "admin:KMSKeyStatus",
+                "admin:AddUserToGroup",
+                "admin:RemoveUserFromGroup",
+                "admin:GetGroup",
+                "admin:ListGroups",
+                "admin:EnableGroup",
+                "admin:DisableGroup",
+                "admin:CreatePolicy",
+                "admin:DeletePolicy",
+                "admin:GetPolicy",
+                "admin:AttachUserOrGroupPolicy",
+                "admin:ListUserPolicies"
+            ],
+            "Effect": "Allow",
+            "Sid": ""
+        },
+        {
+            "Action": [
+                "s3:*"
+            ],
+            "Effect": "Allow",
+            "Resource": [
+                "arn:aws:s3:::*"
+            ],
+            "Sid": ""
+        }
+    ]
+}

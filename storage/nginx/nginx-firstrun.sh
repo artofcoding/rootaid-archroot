@@ -1,43 +1,55 @@
 #!/usr/bin/env bash
 # Copyright (C) 2020 art of coding UG, Hamburg
 
-MINIO_HOSTNAME="${MINIO_HOSTNAME:-storage.$(hostname -f)}"
-
 set -o nounset
 set -o errexit
 
 execdir="$(pushd $(dirname $0) >/dev/null ; pwd ; popd >/dev/null)"
 instancedir="${execdir}/instance"
 
-echo "Setting up nginx"
+export $(cat "${execdir}"/variables.env)
 
-echo "Configuring nginx image"
+echo "Setting up nginx ${HOSTNAME}"
+
+echo "Copying configuration to nginx"
 mkdir -p "${instancedir}"
-cat "${execdir}"/storage.tmpl.conf \
+cat "${execdir}"/minio.tmpl.conf \
     | sed -e "s#HOSTNAME#${MINIO_HOSTNAME}#g" \
-    >"${instancedir}"/storage.conf.disabled
+    >"${instancedir}"/minio.conf.disabled
+cat "${execdir}"/hoerbuchdienst.tmpl.conf \
+    | sed -e "s#HOSTNAME#${HBD_HOSTNAME}#g" \
+    >"${instancedir}"/hoerbuchdienst.conf.disabled
+docker cp "${instancedir}"/minio.conf.disabled /etc/nginx/conf.d/
+#TOOD COPY "${instancedir}"/hoerbuchdienst.conf.disabled /etc/nginx/conf.d/
 
-echo "Building nginx image"
-pushd "${execdir}" >/dev/null
-docker build .
-popd >/dev/null
-
-echo "Configuring nginx"
+echo "Starting nginx"
 docker-compose up -d --no-deps rproxy
 sleep 5
+
+echo "Creating TLS server certificates"
+hostname="$(hostname -f)"
+certonly_args="--agree-tos -m support@rootaid.de
+    --webroot --webroot-path=/var/lib/letsencrypt
+    --uir
+    --hsts
+    --staple-ocsp --must-staple
+    -n"
 docker-compose exec rproxy \
     mkdir /var/lib/letsencrypt
 docker-compose exec rproxy \
-    certbot certonly \
-        --agree-tos -m support@rootaid.de \
-        --webroot --webroot-path=/var/lib/letsencrypt \
-        --uir \
-        --hsts \
-        --staple-ocsp --must-staple \
-        -n \
-        -d "${MINIO_HOSTNAME}"
+    certbot certonly ${certonly_args} -d "vault.${hostname}"
 docker-compose exec rproxy \
-    mv /etc/nginx/conf.d/storage.conf.disabled /etc/nginx/conf.d/storage.conf
+    certbot certonly ${certonly_args} -d "kes.${hostname}"
+docker-compose exec rproxy \
+    certbot certonly ${certonly_args} -d "s3.${hostname}"
+docker-compose exec rproxy \
+    certbot certonly ${certonly_args} -d "rabbitmq.${hostname}"
+docker-compose exec rproxy \
+    certbot certonly ${certonly_args} -d "hoerbuchdienst.${hostname}"
+
+echo "Activating nginx configuration"
+docker-compose exec rproxy \
+    mv /etc/nginx/conf.d/minio.conf.disabled /etc/nginx/conf.d/minio.conf
 
 docker-compose down
 
