@@ -25,7 +25,7 @@ case "${mode}" in
         set +o errexit
         rm -rf kes/instance
         rm -rf vault/instance
-        [[ "${all}" == "all" ]] && rm -rf nginx/instance
+        [[ "${all}" == "all" ]] && rm -rf nginx/instance
         docker system prune -f
         docker volume rm storage_kesinstance
         docker volume rm storage_mcrootconfig
@@ -33,13 +33,13 @@ case "${mode}" in
         docker volume rm storage_minioinstance
         docker volume rm storage_miniopolicy
         docker volume rm storage_rabbitmqdata
-        [[ "${all}" == "all" ]] && docker volume rm storage_rproxycerts
+        [[ "${all}" == "all" ]] && docker volume rm storage_rproxycerts
         docker volume rm storage_rproxyconf
         docker volume rm storage_vaultconfig
         docker volume rm storage_vaultfile
         docker volume rm storage_vaultlogs
-        [[ "${all}" == "all" ]] && docker image rm storage-rproxy:latest
-        [[ "${all}" == "all" ]] && docker image rm storage-rabbitmq:latest
+        [[ "${all}" == "all" ]] && docker image rm storage-rproxy:latest
+        [[ "${all}" == "all" ]] && docker image rm storage-rabbitmq:latest
         docker image prune -f
         set -o errexit
         popd >/dev/null
