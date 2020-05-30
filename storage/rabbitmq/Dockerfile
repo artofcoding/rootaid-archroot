@@ -1,10 +1,10 @@
 ARG RABBITMQ_RELEASE
 FROM rabbitmq:${RABBITMQ_RELEASE} AS base
 
-RUN rabbitmq-plugins enable --offline rabbitmq_mqtt
-RUN rabbitmq-plugins enable --offline rabbitmq_stomp
+#RUN rabbitmq-plugins enable --offline rabbitmq_mqtt
+#RUN rabbitmq-plugins enable --offline rabbitmq_stomp
+RUN rabbitmq-plugins enable --offline rabbitmq_federation
 RUN rabbitmq-plugins enable --offline rabbitmq_federation_management
-RUN rabbitmq-plugins enable rabbitmq_federation_management
 
 FROM base
 ADD rabbitmq.conf /etc/rabbitmq.conf.disabled
